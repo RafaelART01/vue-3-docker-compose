@@ -1,6 +1,24 @@
 <template>
     <div class="game">
         <h1 class="game__title"> Переливатор</h1>
+        <div class="game__header">
+            <button
+                v-if="!getGameStarted"
+                class="game__start-button"
+                @click="() => startGame()"
+            >
+            Начать игру
+            </button>
+            <div class="game__timer">{{ formattedTime }}</div>
+            <label class="game__mode-toggle">
+                <input
+                    type="checkbox"
+                    v-model="hardModeLocal"
+                    :disabled="getGameStarted"
+                >
+                Сложный режим
+            </label>
+        </div>
         <div v-if="getGameWon" class="game__win-message">
             Поздравляем! Вы победили! 
         </div>
@@ -10,6 +28,7 @@
                 :key = "index"
                 :layers = "flask"
                 :active = "getCurrentFlask === index"
+                :blocked = "getHardMode && getBlockedFlask === index"
                 :label = "'Колба ' + (index + 1)"
                 :max-layers = "getMaxLayers"
                 @click = "() => handleFlaskClick(index)"
@@ -22,6 +41,32 @@
             >
             Новая игра
             </button>
+        </div>
+        <div v-if="getBestTimes.length || getHardModeBestTimes.length" class="game__records">
+            <div 
+                v-if="!getHardMode && getBestTimes.length"
+                :key="'normal-' + getBestTimes.length"
+                class="game__records-section"
+            >
+                <h3>Топ-10 результатов (обычный режим)</h3>
+                <ol>
+                    <li v-for="(time, idx) in getBestTimes" :key="idx">
+                        {{ formatTime(time) }}
+                    </li>
+                </ol>
+            </div>
+            <div 
+                v-if="getHardMode && getHardModeBestTimes.length"
+                :key="'hard-' + getHardModeBestTimes.length"
+                class="game__records-section"
+            >
+                <h3>Топ-10 результатов (сложный режим)</h3>
+                <ol>
+                    <li v-for="(time, idx) in getHardModeBestTimes" :key="idx">
+                        {{ formatTime(time) }}
+                    </li>
+                </ol>
+            </div>
         </div>
     </div>
 </template>
@@ -40,18 +85,49 @@ export default {
             'getFlasks',
             'getCurrentFlask',
             'getGameWon',
-            'getMaxLayers'
-        ])
+            'getMaxLayers',
+            'getTime',
+            'getBestTimes',
+            'getHardModeBestTimes',
+            'getHardMode',
+            'getBlockedFlask',
+            'getGameStarted'
+        ]),
+        hardModeLocal: {
+            get() {
+                return this.getHardMode
+            },
+            set(value) {
+                this.toggleHardMode(value)
+            }
+        },
+        formattedTime() {
+            return this.formatTime(this.getTime)
+        }
     },
     methods: {
         ...mapActions('game', [
             'initGame',
-            'tryMove'
+            'tryMove',
+            'stopTimer',
+            'startGame',
+            'toggleHardMode',
+            'setTime',
+            'setHardMode',
+            'setBlockedFlask',
+            'setBestTimes',
+            'setHardModeBestTimes',
+            'setCurrentFlask'
         ]),
-        setCurrentFlask(index) {
-            this.$store.commit('game/SET_CURRENT_FLASK', index)
+        formatTime(seconds){
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return minutes + ':' + secs.toString().padStart(2, '0');
         },
         handleFlaskClick(index) {
+            if (!this.getGameStarted) {
+                return
+            }
             if (this.getCurrentFlask === null) {
                 this.setCurrentFlask(index)
             } else {
@@ -62,11 +138,26 @@ export default {
             }
         },
         restartGame() {
+            this.stopTimer()
+            this.setTime(0)
+            this.setHardMode(false)
+            this.setBlockedFlask(null)
             this.initGame()
         }
     },
     mounted() {
+        const saved = localStorage.getItem('bestTimes')
+        if (saved) {
+            this.setBestTimes(JSON.parse(saved))
+        }
+        const savedHardMode = localStorage.getItem('hardModeBestTimes')
+        if (savedHardMode) {
+            this.setHardModeBestTimes(JSON.parse(savedHardMode))
+        }
         this.restartGame()
+    },
+    beforeUnmount() {
+        this.stopTimer()
     }
 }
 </script>
@@ -124,6 +215,76 @@ export default {
 
         &:hover {
             background: #2980B9;
+        }
+    }
+
+    &__header {
+        display: flex;
+        gap: 20px;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    &__timer {
+        color: white;
+        font-size: 20px;
+        font-weight: bold;
+        background: rgba(0, 0, 0, 0.2);
+        padding: 8px 16px;
+        border-radius: 8px;
+    }
+
+    &__mode-toggle {
+        color: white;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        input {
+            cursor: pointer;
+            &:disabled {
+                cursor: not-allowed;
+                opacity: 0.5;
+            }
+        }
+    }
+
+    &__records {
+        margin-top: 30px;
+        color: white;
+        text-align: center;
+        display: flex;
+        gap: 40px;
+        flex-wrap: wrap;
+        justify-content: center;
+        &-section {
+            h3 {
+                margin-bottom: 10px;
+                font-size: 18px;
+            }
+            ol {
+                list-style-position: inside;
+                padding: 0;
+                li {
+                    padding: 4px 0;
+                    font-size: 16px;
+                }
+            }
+        }
+    }
+
+    &__start-button {
+        padding: 12px 24px;
+        font-size: 16px;
+        border: none;
+        border-radius: 8px;
+        background: #2ECC71;
+        color: white;
+        cursor: pointer;
+        transition: background 0.3s;
+        margin-bottom: 20px;
+        &:hover {
+            background: #27AE60;
         }
     }
 }
