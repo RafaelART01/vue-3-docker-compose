@@ -30,8 +30,13 @@
                 :active = "getCurrentFlask === index"
                 :blocked = "getHardMode && getBlockedFlask === index"
                 :label = "'Колба ' + (index + 1)"
-                :max-layers = "getMaxLayers"
+                :max-layers = "MAX_LAYERS"
                 @click = "() => handleFlaskClick(index)"
+                draggable = "true"
+                @dragstart = "(e) => handleDragStart(e, index)"
+                @dragover = "(e) => handleDragOver(e)"
+                @drop = "(e) => handleDrop(e, index)"
+                @dragend = "(e) => handleDragEnd(e)"
             />
         </div>
         <div class="game__controls">
@@ -75,8 +80,15 @@
 import Flask from '@/ui/Flask.vue'
 import { mapGetters, mapActions } from 'vuex';
 
+const MAX_LAYERS = 4
+
 export default {
     name: 'GamePage',
+    data() {
+        return {
+            MAX_LAYERS
+        }
+    },
     components: {
         Flask
     },
@@ -85,7 +97,6 @@ export default {
             'getFlasks',
             'getCurrentFlask',
             'getGameWon',
-            'getMaxLayers',
             'getTime',
             'getBestTimes',
             'getHardModeBestTimes',
@@ -105,6 +116,20 @@ export default {
             return this.formatTime(this.getTime)
         }
     },
+    mounted() {
+        const saved = localStorage.getItem('bestTimes')
+        if (saved) {
+            this.setBestTimes(JSON.parse(saved))
+        }
+        const savedHardMode = localStorage.getItem('hardModeBestTimes')
+        if (savedHardMode) {
+            this.setHardModeBestTimes(JSON.parse(savedHardMode))
+        }
+        this.restartGame()
+    },
+    beforeUnmount() {
+        this.stopTimer()
+    },
     methods: {
         ...mapActions('game', [
             'initGame',
@@ -117,7 +142,8 @@ export default {
             'setBlockedFlask',
             'setBestTimes',
             'setHardModeBestTimes',
-            'setCurrentFlask'
+            'setCurrentFlask',
+            'reorderFlasks'
         ]),
         formatTime(seconds){
             const minutes = Math.floor(seconds / 60);
@@ -143,21 +169,35 @@ export default {
             this.setHardMode(false)
             this.setBlockedFlask(null)
             this.initGame()
+        },
+        handleDragStart(event, index) {
+            if (!this.getGameStarted) {
+                if (this.getHardMode && this.getBlockedFlask === index) {
+                    event.preventDefault()
+                    return
+                }
+                event.dataTransfer.setData('text/plain', index)
+                event.target.style.opacity = '0.5'
+            } else {
+                event.preventDefault()
+            }
+        },
+        handleDragOver(event) {
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'move'
+        },
+        handleDrop(event, toIndex) {
+            event.preventDefault()
+            if (!this.getGameStarted) {
+                const fromIndex = parseInt(event.dataTransfer.getData('text/plain'))
+                if (fromIndex !== toIndex) {
+                    this.reorderFlasks({ from: fromIndex, to: toIndex })
+                }
+            }
+        },
+        handleDragEnd(event) {
+            event.target.style.opacity = '1'
         }
-    },
-    mounted() {
-        const saved = localStorage.getItem('bestTimes')
-        if (saved) {
-            this.setBestTimes(JSON.parse(saved))
-        }
-        const savedHardMode = localStorage.getItem('hardModeBestTimes')
-        if (savedHardMode) {
-            this.setHardModeBestTimes(JSON.parse(savedHardMode))
-        }
-        this.restartGame()
-    },
-    beforeUnmount() {
-        this.stopTimer()
     }
 }
 </script>

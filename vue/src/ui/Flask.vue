@@ -25,9 +25,7 @@
 <script>
 export default {
     name: 'Flask',
-
     emits: ['click'],
-
     props: {
         layers: {
             type: Array,
@@ -50,7 +48,6 @@ export default {
             default: false
         }
     },
-
     methods: {
         handleClick() {
             if (!this.blocked) {
@@ -114,6 +111,16 @@ export default {
         font-size: 14px;
         color: #2C3E50;
         font-weight: bold;
+    }
+
+    &[draggable="true"] {
+        cursor: grab;
+        user-select: none;
+        transition: opacity 0.2s;
+
+        &:active {
+            cursor: grabbing;
+        }
     }
 
     &--blocked {
